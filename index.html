@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obsidian Tasks</title>
+    <style>
+        :root {
+            --bg-app: #000000;
+            --surface: #0a0a0a;
+            --p-high: #ff2a2a;
+            --p-med: #ffc800;
+            --p-low: #00ff88;
+            --text-main: #ffffff;
+            --text-muted: #666666;
+            --border: #333;
+            --font-stack: Consolas, Monaco, 'Courier New', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+
+        body {
+            background-color: var(--bg-app);
+            color: var(--text-main);
+            font-family: var(--font-stack);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .app-shell {
+            width: 100%;
+            max-width: 600px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            padding: 2rem;
+            box-shadow: 0 0 40px rgba(255, 255, 255, 0.05);
+            position: relative;
+        }
+
+        .app-shell::before {
+            content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+            background: linear-gradient(90deg, var(--p-high), var(--p-med), var(--p-low));
+        }
+
+        header {
+            display: flex; justify-content: space-between; align-items: flex-end;
+            margin-bottom: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 1rem;
+        }
+
+        h1 { font-size: 1.5rem; letter-spacing: -1px; }
+        .stats { font-size: 0.8rem; color: var(--text-muted); }
+
+        .input-grid {
+            display: grid; grid-template-columns: 1fr 90px auto; gap: 10px; margin-bottom: 1rem;
+        }
+
+        input[type="text"], select {
+            background: #111; border: 1px solid var(--border); color: white;
+            padding: 12px; font-family: inherit; font-size: 0.9rem;
+        }
+
+        .btn-add {
+            background: white; color: black; border: none; padding: 0 20px;
+            font-weight: bold; cursor: pointer; text-transform: uppercase;
+        }
+        .btn-add:hover { background: #ddd; }
+
+        .mic-wrapper { position: relative; }
+        
+        .btn-mic {
+            position: absolute; right: 5px; top: 50%; transform: translateY(-50%);
+            background: transparent; border: 1px solid var(--border); color: var(--text-muted);
+            cursor: pointer; width: 30px; height: 30px; border-radius: 4px; display: flex;
+            align-items: center; justify-content: center; transition: all 0.2s;
+        }
+        .btn-mic:hover { color: white; border-color: white; }
+        
+        .btn-mic.listening {
+            color: var(--bg-app); background: var(--p-high); border-color: var(--p-high);
+            animation: pulse 1s infinite;
+        }
+
+        #mic-error {
+            color: var(--p-high); font-size: 0.75rem; height: 20px; margin-bottom: 10px;
+            display: flex; align-items: center; gap: 5px;
+        }
+
+        ul { list-style: none; margin-top: 1rem; }
+        
+        .task-card {
+            background: #050505; border: 1px solid var(--border);
+            border-left-width: 4px; padding: 12px; margin-bottom: 8px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .priority-high { border-left-color: var(--p-high); }
+        .priority-med { border-left-color: var(--p-med); }
+        .priority-low { border-left-color: var(--p-low); }
+
+        .task-content { display: flex; gap: 10px; align-items: center; }
+        .badge { font-size: 0.7rem; padding: 2px 4px; border: 1px solid #333; color: #888; text-transform: uppercase; }
+        
+        .btn-del {
+            background: transparent; border: none; color: #444; cursor: pointer; font-family: inherit;
+        }
+        .btn-del:hover { color: var(--p-high); }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="app-shell">
+    <header>
+        <h1>// OBSIDIAN</h1>
+        <div class="stats" id="taskStats">READY</div>
+    </header>
+
+    <div class="input-grid">
+        <div class="mic-wrapper">
+            <input type="text" id="taskInput" placeholder="Enter task..." autocomplete="off" style="width: 100%; padding-right: 40px;">
+            <button class="btn-mic" id="micBtn" title="Voice Input">🎙️</button>
+        </div>
+        
+        <select id="priorityInput">
+            <option value="high">HIGH</option>
+            <option value="med" selected>MED</option>
+            <option value="low">LOW</option>
+        </select>
+
+        <button class="btn-add" onclick="addTask()">ADD</button>
+    </div>
+
+    <div id="mic-error"></div>
+
+    <ul id="taskList"></ul>
+</div>
+
+<script>
+    let tasks = JSON.parse(localStorage.getItem('obsidianTasks')) || [];
+    const priorityOrder = { 'high': 1, 'med': 2, 'low': 3 };
+
+    const listEl = document.getElementById('taskList');
+    const inputEl = document.getElementById('taskInput');
+    const priorityEl = document.getElementById('priorityInput');
+    const statsEl = document.getElementById('taskStats');
+    const micBtn = document.getElementById('micBtn');
+    const errorEl = document.getElementById('mic-error');
+
+    render();
+
+    function addTask() {
+        const text = inputEl.value.trim();
+        if(!text) return;
+        
+        tasks.push({
+            id: Date.now(),
+            text: text,
+            priority: priorityEl.value,
+            completed: false
+        });
+        
+        saveAndRender();
+        inputEl.value = '';
+    }
+
+    function deleteTask(id) {
+        tasks = tasks.filter(t => t.id !== id);
+        saveAndRender();
+    }
+
+    function saveAndRender() {
+        tasks.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
+        localStorage.setItem('obsidianTasks', JSON.stringify(tasks));
+        render();
+    }
+
+    function render() {
+        listEl.innerHTML = '';
+        tasks.forEach(task => {
+            const li = document.createElement('li');
+            li.className = `task-card priority-${task.priority}`;
+            li.innerHTML = `
+                <div class="task-content">
+                    <span class="badge">${task.priority}</span>
+                    <span>${task.text}</span>
+                </div>
+                <button class="btn-del" onclick="deleteTask(${task.id})">[X]</button>
+            `;
+            listEl.appendChild(li);
+        });
+        statsEl.textContent = `${tasks.length} TASKS`;
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+    if (SpeechRecognition) {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.lang = 'en-US';
+
+        micBtn.onclick = function() {
+            if (micBtn.classList.contains('listening')) {
+                recognition.stop();
+            } else {
+                errorEl.textContent = "";
+                try { recognition.start(); } 
+                catch (err) { errorEl.textContent = "Start Error: " + err.message; }
+            }
+        };
+
+        recognition.onstart = function() {
+            micBtn.classList.add('listening');
+            inputEl.placeholder = "Listening...";
+        };
+
+        recognition.onend = function() {
+            micBtn.classList.remove('listening');
+            inputEl.placeholder = "Enter task...";
+        };
+
+        recognition.onresult = function(event) {
+            const transcript = event.results[0][0].transcript;
+            inputEl.value = transcript;
+            inputEl.focus();
+        };
+
+        recognition.onerror = function(event) {
+            micBtn.classList.remove('listening');
+            if (event.error === 'not-allowed') {
+                errorEl.innerHTML = "Mic Blocked: Allow permission.";
+            } else if (event.error === 'network') {
+                errorEl.innerHTML = "Network Error: Go online.";
+            } else if (event.error === 'service-not-allowed') {
+                errorEl.innerHTML = "Security: Use localhost or HTTPS.";
+            } else {
+                errorEl.innerHTML = "Error: " + event.error;
+            }
+        };
+        
+    } else {
+        micBtn.style.display = 'none';
+        errorEl.textContent = "Browser not supported.";
+    }
+
+    inputEl.addEventListener('keypress', (e) => {
+        if(e.key === 'Enter') addTask();
+    });
+</script>
+</body>
+</html>
